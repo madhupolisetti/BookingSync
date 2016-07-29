@@ -12,5 +12,6 @@ namespace BookingSync
         public const string GET_UNSYNCED_SCHEDULES = "GetUnSyncedSchedules";
         public const string GET_MOVIES_TO_SYNC = "GetMoviesToSync";
         public const string UPDATE_SERVICE_STATUS = "UpdateServiceStatus";
+        public const string GET_EXPIRED_LOCKED_SEATS = "GetExpiredLockedSeats";
     }
 }

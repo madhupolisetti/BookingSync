@@ -38,7 +38,7 @@ namespace BookingSync
             this._scheduleSyncThread = new Thread(new ThreadStart(this.SyncSchedules));
             this._scheduleSyncThread.Name = "ScheduleSync";
             this._scheduleSyncThread.Start();
-            this._releaseThread = new Thread(new ThreadStart(this.ReleaseExpiredLockedSeats))
+            this._releaseThread = new Thread(new ThreadStart(this.ReleaseExpiredLockedSeats));
             this._releaseThread.Name = "Release";
             this._releaseThread.Start();
         }
@@ -72,8 +72,8 @@ namespace BookingSync
             sqlCmd.CommandType = CommandType.StoredProcedure;
             SqlDataAdapter da = null;
             DataSet ds = null;
-            XmlDocument xmlDocument = null;
-            XmlElement rootElement = null;
+            XmlDocument xmlDocument = new XmlDocument();
+            XmlElement rootElement = xmlDocument.CreateElement("Seats");
             while (!SharedClass.HasStopSignal)
             {
                 try
@@ -82,7 +82,8 @@ namespace BookingSync
                     sqlCmd.Parameters.Add(DataBaseParameters.SUCCESS, SqlDbType.Bit).Direction = ParameterDirection.Output;
                     sqlCmd.Parameters.Add(DataBaseParameters.MESSAGE, SqlDbType.VarChar, 1000).Direction = ParameterDirection.Output;
                     sqlCmd.Parameters.Add(DataBaseParameters.CINEMA_ID, SqlDbType.Int).Direction = ParameterDirection.Output;
-                    sqlCmd.Parameters.Add(DataBaseParameters.CINEMA_NAME, SqlDbType.VarChar, 20).Direction = ParameterDirection.Output;
+                    sqlCmd.Parameters.Add(DataBaseParameters.CINEMA_NAME, SqlDbType.VarChar, 50).Direction = ParameterDirection.Output;
+                    sqlCmd.Parameters.Add(DataBaseParameters.NOTIFY_URL, SqlDbType.VarChar, 200).Direction = ParameterDirection.Output;
                     da = new SqlDataAdapter();
                     da.SelectCommand = sqlCmd;
                     ds = new DataSet();
@@ -93,11 +94,10 @@ namespace BookingSync
                         {
                             SharedClass.Logger.Info("Seats to Sync : " + ds.Tables[0].Rows.Count.ToString());
                             this._lastSeatSyncCount = ds.Tables[0].Rows.Count;
-                            xmlDocument = new XmlDocument();
-                            rootElement = xmlDocument.CreateElement("Seats");
+                            rootElement.RemoveAll();
+                            rootElement.RemoveAllAttributes();                            
                             rootElement.SetAttribute("CinemaId", sqlCmd.Parameters[DataBaseParameters.CINEMA_ID].Value.ToString());
                             rootElement.SetAttribute("CinemaName", sqlCmd.Parameters[DataBaseParameters.CINEMA_NAME].Value.ToString());
-                            xmlDocument.AppendChild(rootElement);
                             foreach (DataRow seatRow in ds.Tables[0].Rows)
                             {
                                 XmlElement seatElement = xmlDocument.CreateElement("Seat");
@@ -147,7 +147,7 @@ namespace BookingSync
                     sqlCmd.Parameters.Add(DataBaseParameters.SUCCESS, SqlDbType.Bit).Direction = ParameterDirection.Output;
                     sqlCmd.Parameters.Add(DataBaseParameters.MESSAGE, SqlDbType.VarChar, 1000).Direction = ParameterDirection.Output;
                     sqlCmd.Parameters.Add(DataBaseParameters.CINEMA_ID, SqlDbType.Int).Direction = ParameterDirection.Output;
-                    sqlCmd.Parameters.Add(DataBaseParameters.CINEMA_NAME, SqlDbType.VarChar, 20).Direction = ParameterDirection.Output;
+                    sqlCmd.Parameters.Add(DataBaseParameters.CINEMA_NAME, SqlDbType.VarChar, 50).Direction = ParameterDirection.Output;
                     sqlCmd.Parameters.Add(DataBaseParameters.NOTIFY_URL, SqlDbType.VarChar, 200).Direction = ParameterDirection.Output;
                     da = new SqlDataAdapter();
                     da.SelectCommand = sqlCmd;
@@ -181,6 +181,7 @@ namespace BookingSync
                 {
                     SharedClass.Logger.Error("Exception in ScheduleSync, Reason : " + e.ToString());
                 }
+                Thread.Sleep(10000);
             }
             this._isScheduleSyncThreadRunning = false;
         }
@@ -198,7 +199,7 @@ namespace BookingSync
                 sqlCmd.Parameters.Add(DataBaseParameters.SUCCESS, SqlDbType.Bit).Direction = ParameterDirection.Output;
                 sqlCmd.Parameters.Add(DataBaseParameters.MESSAGE, SqlDbType.VarChar, 1000).Direction = ParameterDirection.Output;
                 sqlCmd.Parameters.Add(DataBaseParameters.CINEMA_ID, SqlDbType.Int).Direction = ParameterDirection.Output;
-                sqlCmd.Parameters.Add(DataBaseParameters.CINEMA_NAME, SqlDbType.VarChar, 20).Direction = ParameterDirection.Output;
+                sqlCmd.Parameters.Add(DataBaseParameters.CINEMA_NAME, SqlDbType.VarChar, 50).Direction = ParameterDirection.Output;
                 sqlCmd.Parameters.Add(DataBaseParameters.NOTIFY_URL, SqlDbType.VarChar, 200).Direction = ParameterDirection.Output;
                 da = new SqlDataAdapter();
                 da.SelectCommand = sqlCmd;
@@ -240,12 +241,63 @@ namespace BookingSync
         }
         private void ReleaseExpiredLockedSeats()
         {
-            //SqlConnection sqlCon = new SqlConnection(SharedClass.ConnectionString);
-            //SqlCommand sqlCmd = new SqlCommand("Release")
+            SqlConnection sqlCon = new SqlConnection(SharedClass.ConnectionString);
+            SqlCommand sqlCmd = new SqlCommand(StoredProcedures.GET_EXPIRED_LOCKED_SEATS, sqlCon);
+            sqlCmd.CommandType = CommandType.StoredProcedure;
+            SqlDataAdapter da = null;
+            DataSet ds = null;
+            XmlDocument xmlDoc = new XmlDocument();
+            XmlElement rootElement = xmlDoc.CreateElement("Seats");
+            xmlDoc.AppendChild(rootElement);
+            SharedClass.Logger.Info("Started");
+            while (!SharedClass.HasStopSignal)
+            {
+                try
+                {
+                    sqlCmd.Parameters.Clear();
+                    sqlCmd.Parameters.Add(DataBaseParameters.SUCCESS, SqlDbType.Bit).Direction = ParameterDirection.Output;
+                    sqlCmd.Parameters.Add(DataBaseParameters.MESSAGE, SqlDbType.VarChar, 1000).Direction = ParameterDirection.Output;
+                    sqlCmd.Parameters.Add(DataBaseParameters.CINEMA_ID, SqlDbType.Int).Direction = ParameterDirection.Output;
+                    sqlCmd.Parameters.Add(DataBaseParameters.CINEMA_NAME, SqlDbType.VarChar, 50).Direction = ParameterDirection.Output;
+                    sqlCmd.Parameters.Add(DataBaseParameters.NOTIFY_URL, SqlDbType.VarChar, 200).Direction = ParameterDirection.Output;
+                    da = new SqlDataAdapter();
+                    da.SelectCommand = sqlCmd;
+                    ds = new DataSet();
+                    da.Fill(ds);
+                    if (Convert.ToBoolean(sqlCmd.Parameters[DataBaseParameters.SUCCESS].Value.ToString()))
+                    {
+                        if (ds.Tables.Count > 0 && ds.Tables[0].Rows.Count > 0)
+                        {
+                            rootElement.RemoveAll();
+                            rootElement.RemoveAllAttributes();
+                            rootElement.SetAttribute("CinemaId", sqlCmd.Parameters[DataBaseParameters.CINEMA_ID].Value.ToString());
+                            rootElement.SetAttribute("CinemaName", sqlCmd.Parameters[DataBaseParameters.CINEMA_NAME].Value.ToString());
+                            foreach (DataRow seatRow in ds.Tables[0].Rows)
+                            {
+                                XmlElement seatElement = xmlDoc.CreateElement("Seat");
+                                foreach (DataColumn seatProperty in seatRow.Table.Columns)
+                                {
+                                    seatElement.SetAttribute(seatProperty.ColumnName, seatRow[seatProperty.ColumnName].ToString());
+                                }
+                                rootElement.AppendChild(seatElement);
+                            }
+                            this.Notify(sqlCmd.Parameters[DataBaseParameters.NOTIFY_URL].Value.ToString(), xmlDoc.OuterXml);
+                        }
+                    }
+                    else
+                    {
+                        SharedClass.Logger.Error("Error while getting expired locked seats. " + sqlCmd.Parameters[DataBaseParameters.MESSAGE].Value.ToString());
+                    }
+                }
+                catch (Exception e)
+                {
+                    SharedClass.Logger.Error("Exception : " + e.ToString());
+                }
+            }
         }
         private void Notify(string notifyUrl, string data)
         {
-            SharedClass.Logger.Info("Payload : " + data);
+            SharedClass.Logger.Info("Notifying To " + notifyUrl + " With Payload : " + data);
             HttpWebRequest request = null;
             HttpWebResponse response = null;
             StreamReader streamReader = null;
