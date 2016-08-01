@@ -29,7 +29,7 @@ namespace BookingSync
 
         protected override void OnStop()
         {
-            SharedClass.Logger.Info("Stop Singnal Received");
+            SharedClass.Logger.Info("Stop Signal Received");
             System.Threading.Thread stopThread = new System.Threading.Thread(new System.Threading.ThreadStart(this._applicationController.Stop));
             stopThread.Name = "StopSignal";
             stopThread.Start();

@@ -16,7 +16,6 @@ namespace BookingSync
     public class ApplicationController
     {
         private int _lastSeatSyncCount = 0;
-        private int _lastScheduleSyncCount = 0;
         private Thread _seatSyncThread = null;
         private bool _isSeatSyncThreadRunning = false;
         private Thread _scheduleSyncThread = null;
@@ -48,17 +47,24 @@ namespace BookingSync
             SharedClass.Logger.Info("Processing Stop Signal");            
             while (this._isScheduleSyncThreadRunning)
             {
-                SharedClass.Logger.Info(this._scheduleSyncThread.Name + " thread is still running");
+                SharedClass.Logger.Info(this._scheduleSyncThread.Name + " thread is still running. ThreadState " + this._scheduleSyncThread.ThreadState);
                 Thread.Sleep(2000);
                 if (this._scheduleSyncThread.ThreadState == ThreadState.WaitSleepJoin)
                     this._scheduleSyncThread.Interrupt();
             }
             while (this._isSeatSyncThreadRunning)
             {
-                SharedClass.Logger.Info(this._seatSyncThread.Name + " thread is still running");
+                SharedClass.Logger.Info(this._seatSyncThread.Name + " thread is still running. ThreadState " + this._seatSyncThread.ThreadState);
                 Thread.Sleep(2000);
-                if (this._scheduleSyncThread.ThreadState == ThreadState.WaitSleepJoin)
-                    this._scheduleSyncThread.Interrupt();
+                if (this._seatSyncThread.ThreadState == ThreadState.WaitSleepJoin)
+                    this._seatSyncThread.Interrupt();
+            }
+            while (this._isReleaseThreadRunning)
+            {
+                SharedClass.Logger.Info(this._releaseThread.Name + " thread is still running. ThreadState : " + this._releaseThread.ThreadState);
+                Thread.Sleep(2000);
+                if (this._releaseThread.ThreadState == ThreadState.WaitSleepJoin)
+                    this._releaseThread.Interrupt();
             }
             this.UpdateServiceStatus(true);
             SharedClass.IsServiceCleaned = true;
@@ -66,7 +72,8 @@ namespace BookingSync
         }
         private void SyncSeatingChart()
         {
-            int threadSleepTime = 120;
+            SharedClass.Logger.Info("Initializing Objects");
+            int threadSleepTime = SharedClass.SeatSyncIntervalInSeconds;
             SqlConnection sqlCon = new SqlConnection(SharedClass.ConnectionString);
             SqlCommand sqlCmd = new SqlCommand(StoredProcedures.GET_UNSYNCED_SEATING_CHART, sqlCon);
             sqlCmd.CommandType = CommandType.StoredProcedure;
@@ -74,6 +81,8 @@ namespace BookingSync
             DataSet ds = null;
             XmlDocument xmlDocument = new XmlDocument();
             XmlElement rootElement = xmlDocument.CreateElement("Seats");
+            this._isSeatSyncThreadRunning = true;
+            SharedClass.Logger.Info("Started");
             while (!SharedClass.HasStopSignal)
             {
                 try
@@ -125,12 +134,22 @@ namespace BookingSync
                     if (this._lastSeatSyncCount == 0 && threadSleepTime < 300)
                         threadSleepTime = threadSleepTime + 60;
                     else
-                        threadSleepTime = 120;
-                Thread.Sleep(threadSleepTime * 1000);
+                        threadSleepTime = SharedClass.SeatSyncIntervalInSeconds;
+                try
+                {
+                    Thread.Sleep(threadSleepTime * 1000);
+                }
+                catch (ThreadInterruptedException e)
+                { }
+                catch (ThreadAbortException e)
+                { }
             }
+            this._isSeatSyncThreadRunning = false;
+            SharedClass.Logger.Info("Exit");            
         }
         private void SyncSchedules()
         {
+            SharedClass.Logger.Info("Initializing Objects");
             this._isScheduleSyncThreadRunning = true;
             SqlConnection sqlCon = new SqlConnection(SharedClass.ConnectionString);
             SqlCommand sqlCmd = new SqlCommand(StoredProcedures.GET_UNSYNCED_SCHEDULES, sqlCon);
@@ -139,6 +158,8 @@ namespace BookingSync
             DataSet ds = null;
             JArray showsArray = null;
             JObject showObject = null;
+            SharedClass.Logger.Info("Started");
+            this._isScheduleSyncThreadRunning = true;
             while (!SharedClass.HasStopSignal)
             {
                 try
@@ -181,9 +202,17 @@ namespace BookingSync
                 {
                     SharedClass.Logger.Error("Exception in ScheduleSync, Reason : " + e.ToString());
                 }
-                Thread.Sleep(10000);
+                try
+                {
+                    Thread.Sleep(SharedClass.ScheduleSyncIntervalInSeconds * 1000);
+                }
+                catch (ThreadInterruptedException e)
+                { }
+                catch (ThreadAbortException e)
+                { }
             }
             this._isScheduleSyncThreadRunning = false;
+            SharedClass.Logger.Info("Exit");
         }
         private void SyncMovies()
         {
@@ -241,6 +270,7 @@ namespace BookingSync
         }
         private void ReleaseExpiredLockedSeats()
         {
+            SharedClass.Logger.Info("Initializing Objects");
             SqlConnection sqlCon = new SqlConnection(SharedClass.ConnectionString);
             SqlCommand sqlCmd = new SqlCommand(StoredProcedures.GET_EXPIRED_LOCKED_SEATS, sqlCon);
             sqlCmd.CommandType = CommandType.StoredProcedure;
@@ -250,6 +280,7 @@ namespace BookingSync
             XmlElement rootElement = xmlDoc.CreateElement("Seats");
             xmlDoc.AppendChild(rootElement);
             SharedClass.Logger.Info("Started");
+            this._isReleaseThreadRunning = true;
             while (!SharedClass.HasStopSignal)
             {
                 try
@@ -293,7 +324,15 @@ namespace BookingSync
                 {
                     SharedClass.Logger.Error("Exception : " + e.ToString());
                 }
+                try
+                {
+                    Thread.Sleep(SharedClass.ReleaseCheckIntervalInSeconds * 1000);
+                }
+                catch (Exception e)
+                { }
             }
+            this._isReleaseThreadRunning = false;
+            SharedClass.Logger.Info("Exit");
         }
         private void Notify(string notifyUrl, string data)
         {
@@ -336,7 +375,6 @@ namespace BookingSync
                 }
             }
         }
-
         private void LoadConfig()
         {
             SharedClass.InitializeLogger();
@@ -346,7 +384,7 @@ namespace BookingSync
                 byte tempValue = SharedClass.NotifyMaxFailedAttempts;
                 if (byte.TryParse(System.Configuration.ConfigurationManager.AppSettings["NotifyMaxFailedAttempts"].ToString(), out tempValue))
                     SharedClass.NotifyMaxFailedAttempts = tempValue;
-            }
+            }            
         }
         private void UpdateServiceStatus(bool isStopped)
         {
@@ -357,7 +395,7 @@ namespace BookingSync
             {
                 sqlCmd.CommandType = CommandType.StoredProcedure;
                 sqlCmd.Parameters.Add(DataBaseParameters.SERVICE_NAME, SqlDbType.VarChar, 20).Value = "BookingSync";
-                sqlCmd.Parameters.Add(DataBaseParameters.IS_STOPPED, SqlDbType.Bit).Value = false;
+                sqlCmd.Parameters.Add(DataBaseParameters.IS_STOPPED, SqlDbType.Bit).Value = isStopped;
                 sqlCon.Open();
                 sqlCmd.ExecuteNonQuery();
             }

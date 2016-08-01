@@ -17,6 +17,9 @@ namespace BookingSync
         private static byte _notifyMaxFailedAttempts = 0;
         private static string _notifyAuthUserName = string.Empty;
         private static string _notifyAuthPassword = string.Empty;
+        private static int _seatSyncIntervalInSeconds = 120;
+        private static int _scheduleSyncIntervalInSeconds = 600;
+        private static int _releaseCheckIntervalInSeconds = 120;
         #endregion
         public static void InitializeLogger()
         {
@@ -59,6 +62,21 @@ namespace BookingSync
         {
             get { return _notifyAuthPassword; }
             set { _notifyAuthPassword = value; }
+        }
+        public static int SeatSyncIntervalInSeconds
+        {
+            get { return _seatSyncIntervalInSeconds; }
+            set { _seatSyncIntervalInSeconds = value; }
+        }
+        public static int ScheduleSyncIntervalInSeconds
+        {
+            get { return _scheduleSyncIntervalInSeconds; }
+            set { _scheduleSyncIntervalInSeconds = value; }
+        }
+        public static int ReleaseCheckIntervalInSeconds
+        {
+            get { return _releaseCheckIntervalInSeconds; }
+            set { _releaseCheckIntervalInSeconds = value; }
         }
         #endregion
     }
