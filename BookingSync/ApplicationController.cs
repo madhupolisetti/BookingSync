@@ -384,7 +384,25 @@ namespace BookingSync
                 byte tempValue = SharedClass.NotifyMaxFailedAttempts;
                 if (byte.TryParse(System.Configuration.ConfigurationManager.AppSettings["NotifyMaxFailedAttempts"].ToString(), out tempValue))
                     SharedClass.NotifyMaxFailedAttempts = tempValue;
-            }            
+            }
+            if (System.Configuration.ConfigurationManager.AppSettings["ScheduleSyncIntervalInSeconds"] != null)
+            {
+                int tempValue = SharedClass.ScheduleSyncIntervalInSeconds;
+                if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["ScheduleSyncIntervalInSeconds"].ToString(), out tempValue))
+                    SharedClass.ScheduleSyncIntervalInSeconds = tempValue;
+            }
+            if (System.Configuration.ConfigurationManager.AppSettings["SeatSyncIntervalInSeconds"] != null)
+            {
+                int tempValue = SharedClass.SeatSyncIntervalInSeconds;
+                if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["SeatSyncIntervalInSeconds"].ToString(), out tempValue))
+                    SharedClass.SeatSyncIntervalInSeconds = tempValue;
+            }
+            if (System.Configuration.ConfigurationManager.AppSettings["ReleaseCheckIntervalInSeconds"] != null)
+            {
+                int tempValue = SharedClass.ReleaseCheckIntervalInSeconds;
+                if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["ReleaseCheckIntervalInSeconds"].ToString(), out tempValue))
+                    SharedClass.ReleaseCheckIntervalInSeconds = tempValue;
+            }
         }
         private void UpdateServiceStatus(bool isStopped)
         {
