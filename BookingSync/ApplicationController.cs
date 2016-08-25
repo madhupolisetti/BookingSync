@@ -47,24 +47,24 @@ namespace BookingSync
             SharedClass.Logger.Info("Processing Stop Signal");            
             while (this._isScheduleSyncThreadRunning)
             {
-                SharedClass.Logger.Info(this._scheduleSyncThread.Name + " thread is still running. ThreadState " + this._scheduleSyncThread.ThreadState);
-                Thread.Sleep(2000);
+                SharedClass.Logger.Info(this._scheduleSyncThread.Name + " thread is still running. ThreadState " + this._scheduleSyncThread.ThreadState);                
                 if (this._scheduleSyncThread.ThreadState == ThreadState.WaitSleepJoin)
                     this._scheduleSyncThread.Interrupt();
+                Thread.Sleep(1000);
             }
             while (this._isSeatSyncThreadRunning)
             {
-                SharedClass.Logger.Info(this._seatSyncThread.Name + " thread is still running. ThreadState " + this._seatSyncThread.ThreadState);
-                Thread.Sleep(2000);
+                SharedClass.Logger.Info(this._seatSyncThread.Name + " thread is still running. ThreadState " + this._seatSyncThread.ThreadState);                
                 if (this._seatSyncThread.ThreadState == ThreadState.WaitSleepJoin)
                     this._seatSyncThread.Interrupt();
+                Thread.Sleep(1000);
             }
             while (this._isReleaseThreadRunning)
             {
                 SharedClass.Logger.Info(this._releaseThread.Name + " thread is still running. ThreadState : " + this._releaseThread.ThreadState);
-                Thread.Sleep(2000);
                 if (this._releaseThread.ThreadState == ThreadState.WaitSleepJoin)
                     this._releaseThread.Interrupt();
+                Thread.Sleep(1000);
             }
             this.UpdateServiceStatus(true);
             SharedClass.IsServiceCleaned = true;
@@ -81,6 +81,7 @@ namespace BookingSync
             DataSet ds = null;
             XmlDocument xmlDocument = new XmlDocument();
             XmlElement rootElement = xmlDocument.CreateElement("Seats");
+            xmlDocument.AppendChild(rootElement);
             this._isSeatSyncThreadRunning = true;
             SharedClass.Logger.Info("Started");
             while (!SharedClass.HasStopSignal)
@@ -336,7 +337,8 @@ namespace BookingSync
         }
         private void Notify(string notifyUrl, string data)
         {
-            SharedClass.Logger.Info("Notifying To " + notifyUrl + " With Payload : " + data);
+            string notifyId = System.Guid.NewGuid().ToString();
+            SharedClass.Logger.Info("Notifying (" + notifyId + ") To " + notifyUrl + " With Payload : " + data);
             HttpWebRequest request = null;
             HttpWebResponse response = null;
             StreamReader streamReader = null;
@@ -346,6 +348,9 @@ namespace BookingSync
             retry:
             try
             {
+                if (SharedClass.HasStopSignal)
+                    attempt = SharedClass.NotifyMaxFailedAttempts;
+                
                 request = WebRequest.Create(notifyUrl) as HttpWebRequest;
                 request.Method = HttpMethod.POST;
                 request.Timeout = 120 * 1000;//2 Minutes
@@ -367,10 +372,12 @@ namespace BookingSync
             }
             catch (Exception e)
             {
-                SharedClass.Logger.Error("Exception while notifying : " + e.ToString());
+                SharedClass.Logger.Error("Exception while notifying (" + notifyId + ") : " + e.ToString());
                 if (attempt <= SharedClass.NotifyMaxFailedAttempts)
                 {
                     ++attempt;
+                    Thread.Sleep(10000);
+                    SharedClass.Logger.Info("Retry Attempt : " + attempt.ToString());
                     goto retry;
                 }
             }
