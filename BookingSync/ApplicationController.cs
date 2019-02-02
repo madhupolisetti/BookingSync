@@ -34,9 +34,17 @@ namespace BookingSync
             this._seatSyncThread = new Thread(new ThreadStart(this.SyncSeatingChart));
             this._seatSyncThread.Name = "SeatingSync";
             this._seatSyncThread.Start();
-            this._scheduleSyncThread = new Thread(new ThreadStart(this.SyncSchedules));
-            this._scheduleSyncThread.Name = "ScheduleSync";
-            this._scheduleSyncThread.Start();
+            try
+            {
+                this._scheduleSyncThread = new Thread(new ThreadStart(this.SyncSchedules));
+                this._scheduleSyncThread.Name = "ScheduleSync";
+                this._scheduleSyncThread.Start();
+            }
+            catch(Exception e)
+            {
+                SharedClass.Logger.Error(e.ToString());
+            }
+            
             this._releaseThread = new Thread(new ThreadStart(this.ReleaseExpiredLockedSeats));
             this._releaseThread.Name = "Release";
             this._releaseThread.Start();
@@ -148,72 +156,84 @@ namespace BookingSync
             this._isSeatSyncThreadRunning = false;
             SharedClass.Logger.Info("Exit");            
         }
-        private void SyncSchedules()
+        private void SyncSchedule_Debug()
         {
             SharedClass.Logger.Info("Initializing Objects");
-            this._isScheduleSyncThreadRunning = true;
-            SqlConnection sqlCon = new SqlConnection(SharedClass.ConnectionString);
-            SqlCommand sqlCmd = new SqlCommand(StoredProcedures.GET_UNSYNCED_SCHEDULES, sqlCon);
-            sqlCmd.CommandType = CommandType.StoredProcedure;
-            SqlDataAdapter da = null;
-            DataSet ds = null;
-            JArray showsArray = null;
-            JObject showObject = null;
-            SharedClass.Logger.Info("Started");
-            this._isScheduleSyncThreadRunning = true;
-            while (!SharedClass.HasStopSignal)
+        }
+        private void SyncSchedules()
+        {
+            try
             {
-                try
+                SharedClass.Logger.Info("Initializing Objects");
+                this._isScheduleSyncThreadRunning = true;
+                SqlConnection sqlCon = new SqlConnection(SharedClass.ConnectionString);
+                SqlCommand sqlCmd = new SqlCommand(StoredProcedures.GET_UNSYNCED_SCHEDULES, sqlCon);
+                sqlCmd.CommandType = CommandType.StoredProcedure;
+                SqlDataAdapter da = null;
+                DataSet ds = null;
+                JArray showsArray = null;
+                JObject showObject = null;
+                SharedClass.Logger.Info("Started");
+                this._isScheduleSyncThreadRunning = true;
+                while (!SharedClass.HasStopSignal)
                 {
-                    sqlCmd.Parameters.Clear();
-                    sqlCmd.Parameters.Add(DataBaseParameters.SUCCESS, SqlDbType.Bit).Direction = ParameterDirection.Output;
-                    sqlCmd.Parameters.Add(DataBaseParameters.MESSAGE, SqlDbType.VarChar, 1000).Direction = ParameterDirection.Output;
-                    sqlCmd.Parameters.Add(DataBaseParameters.CINEMA_ID, SqlDbType.Int).Direction = ParameterDirection.Output;
-                    sqlCmd.Parameters.Add(DataBaseParameters.CINEMA_NAME, SqlDbType.VarChar, 50).Direction = ParameterDirection.Output;
-                    sqlCmd.Parameters.Add(DataBaseParameters.NOTIFY_URL, SqlDbType.VarChar, 200).Direction = ParameterDirection.Output;
-                    da = new SqlDataAdapter();
-                    da.SelectCommand = sqlCmd;
-                    ds = new DataSet();
-                    da.Fill(ds);
-                    if (Convert.ToBoolean(sqlCmd.Parameters[DataBaseParameters.SUCCESS].Value))
+                    try
                     {
-                        if (ds.Tables.Count > 0 && ds.Tables[0].Rows.Count > 0)
+                        sqlCmd.Parameters.Clear();
+                        sqlCmd.Parameters.Add(DataBaseParameters.SUCCESS, SqlDbType.Bit).Direction = ParameterDirection.Output;
+                        sqlCmd.Parameters.Add(DataBaseParameters.MESSAGE, SqlDbType.VarChar, 1000).Direction = ParameterDirection.Output;
+                        sqlCmd.Parameters.Add(DataBaseParameters.CINEMA_ID, SqlDbType.Int).Direction = ParameterDirection.Output;
+                        sqlCmd.Parameters.Add(DataBaseParameters.CINEMA_NAME, SqlDbType.VarChar, 50).Direction = ParameterDirection.Output;
+                        sqlCmd.Parameters.Add(DataBaseParameters.NOTIFY_URL, SqlDbType.VarChar, 200).Direction = ParameterDirection.Output;
+                        da = new SqlDataAdapter();
+                        da.SelectCommand = sqlCmd;
+                        ds = new DataSet();
+                        da.Fill(ds);
+                        if (Convert.ToBoolean(sqlCmd.Parameters[DataBaseParameters.SUCCESS].Value))
                         {
-                            SharedClass.Logger.Info("Schedules To Sync : " + ds.Tables[0].Rows.Count.ToString());
-                            this.SyncMovies();
-                            showsArray = new JArray();
-                            foreach (DataRow showRow in ds.Tables[0].Rows)
+                            if (ds.Tables.Count > 0 && ds.Tables[0].Rows.Count > 0)
                             {
-                                showObject = new JObject();
-                                foreach (DataColumn showProperty in showRow.Table.Columns)
+                                SharedClass.Logger.Info("Schedules To Sync : " + ds.Tables[0].Rows.Count.ToString());
+                                this.SyncMovies();
+                                showsArray = new JArray();
+                                foreach (DataRow showRow in ds.Tables[0].Rows)
                                 {
-                                    showObject.Add(new JProperty(showProperty.ColumnName, showRow[showProperty]));
+                                    showObject = new JObject();
+                                    foreach (DataColumn showProperty in showRow.Table.Columns)
+                                    {
+                                        showObject.Add(new JProperty(showProperty.ColumnName, showRow[showProperty]));
+                                    }
+                                    showsArray.Add(showObject);
                                 }
-                                showsArray.Add(showObject);
+                                this.Notify(sqlCmd.Parameters[DataBaseParameters.NOTIFY_URL].Value.ToString(), (new JObject(new JProperty("CinemaId", Convert.ToInt16(sqlCmd.Parameters[DataBaseParameters.CINEMA_ID].Value.ToString())), new JProperty("CinemaName", sqlCmd.Parameters[DataBaseParameters.CINEMA_NAME].Value.ToString()), new JProperty("Shows", showsArray))).ToString());
                             }
-                            this.Notify(sqlCmd.Parameters[DataBaseParameters.NOTIFY_URL].Value.ToString(), (new JObject(new JProperty("CinemaId", Convert.ToInt16(sqlCmd.Parameters[DataBaseParameters.CINEMA_ID].Value.ToString())), new JProperty("CinemaName", sqlCmd.Parameters[DataBaseParameters.CINEMA_ID].Value.ToString()), new JProperty("Shows", showsArray))).ToString());
+                        }
+                        else
+                        {
+                            SharedClass.Logger.Error("ScheduleSync ProcedureCall Unsuccessful. Reason : " + sqlCmd.Parameters[DataBaseParameters.MESSAGE].Value);
                         }
                     }
-                    else
+                    catch (Exception e)
                     {
-                        SharedClass.Logger.Error("ScheduleSync ProcedureCall Unsuccessful. Reason : " + sqlCmd.Parameters[DataBaseParameters.MESSAGE].Value);
+                        SharedClass.Logger.Error("Exception in ScheduleSync, Reason : " + e.ToString());
                     }
+                    try
+                    {
+                        Thread.Sleep(SharedClass.ScheduleSyncIntervalInSeconds * 1000);
+                    }
+                    catch (ThreadInterruptedException e)
+                    { }
+                    catch (ThreadAbortException e)
+                    { }
                 }
-                catch (Exception e)
-                {
-                    SharedClass.Logger.Error("Exception in ScheduleSync, Reason : " + e.ToString());
-                }
-                try
-                {
-                    Thread.Sleep(SharedClass.ScheduleSyncIntervalInSeconds * 1000);
-                }
-                catch (ThreadInterruptedException e)
-                { }
-                catch (ThreadAbortException e)
-                { }
+                this._isScheduleSyncThreadRunning = false;
+                SharedClass.Logger.Info("Exit");
             }
-            this._isScheduleSyncThreadRunning = false;
-            SharedClass.Logger.Info("Exit");
+            catch(Exception e)
+            {
+                SharedClass.Logger.Error(e.ToString());
+            }
+            
         }
         private void SyncMovies()
         {
