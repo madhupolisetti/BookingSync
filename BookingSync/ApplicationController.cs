@@ -34,17 +34,11 @@ namespace BookingSync
             this._seatSyncThread = new Thread(new ThreadStart(this.SyncSeatingChart));
             this._seatSyncThread.Name = "SeatingSync";
             this._seatSyncThread.Start();
-            try
-            {
-                this._scheduleSyncThread = new Thread(new ThreadStart(this.SyncSchedules));
-                this._scheduleSyncThread.Name = "ScheduleSync";
-                this._scheduleSyncThread.Start();
-            }
-            catch(Exception e)
-            {
-                SharedClass.Logger.Error(e.ToString());
-            }
-            
+
+            this._scheduleSyncThread = new Thread(new ThreadStart(this.SyncSchedules));
+            this._scheduleSyncThread.Name = "ScheduleSync";
+            this._scheduleSyncThread.Start();
+
             this._releaseThread = new Thread(new ThreadStart(this.ReleaseExpiredLockedSeats));
             this._releaseThread.Name = "Release";
             this._releaseThread.Start();
@@ -406,30 +400,35 @@ namespace BookingSync
         {
             SharedClass.InitializeLogger();
             SharedClass.ConnectionString = System.Configuration.ConfigurationManager.ConnectionStrings["ConnectionString"].ConnectionString;
+            SharedClass.Logger.Info("ConnectionString : " + SharedClass.ConnectionString);
             if (System.Configuration.ConfigurationManager.AppSettings["NotifyMaxFailedAttempts"] != null)
             {
                 byte tempValue = SharedClass.NotifyMaxFailedAttempts;
                 if (byte.TryParse(System.Configuration.ConfigurationManager.AppSettings["NotifyMaxFailedAttempts"].ToString(), out tempValue))
                     SharedClass.NotifyMaxFailedAttempts = tempValue;
             }
+            SharedClass.Logger.Info("NotifyMaxFailedAttempts : " + SharedClass.NotifyMaxFailedAttempts);
             if (System.Configuration.ConfigurationManager.AppSettings["ScheduleSyncIntervalInSeconds"] != null)
             {
                 int tempValue = SharedClass.ScheduleSyncIntervalInSeconds;
                 if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["ScheduleSyncIntervalInSeconds"].ToString(), out tempValue))
                     SharedClass.ScheduleSyncIntervalInSeconds = tempValue;
             }
+            SharedClass.Logger.Info("ScheduleSyncIntervalInSeconds : " + SharedClass.ScheduleSyncIntervalInSeconds.ToString());
             if (System.Configuration.ConfigurationManager.AppSettings["SeatSyncIntervalInSeconds"] != null)
             {
                 int tempValue = SharedClass.SeatSyncIntervalInSeconds;
                 if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["SeatSyncIntervalInSeconds"].ToString(), out tempValue))
                     SharedClass.SeatSyncIntervalInSeconds = tempValue;
             }
+            SharedClass.Logger.Info("SeatSyncIntervalInSeconds : " + SharedClass.SeatSyncIntervalInSeconds.ToString());
             if (System.Configuration.ConfigurationManager.AppSettings["ReleaseCheckIntervalInSeconds"] != null)
             {
                 int tempValue = SharedClass.ReleaseCheckIntervalInSeconds;
                 if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["ReleaseCheckIntervalInSeconds"].ToString(), out tempValue))
                     SharedClass.ReleaseCheckIntervalInSeconds = tempValue;
             }
+            SharedClass.Logger.Info("ReleaseCheckIntervalInSeconds : " + SharedClass.ReleaseCheckIntervalInSeconds.ToString());
         }
         private void UpdateServiceStatus(bool isStopped)
         {
@@ -438,8 +437,12 @@ namespace BookingSync
             SqlCommand sqlCmd = new SqlCommand(StoredProcedures.UPDATE_SERVICE_STATUS, sqlCon);
             try
             {
+                string serviceName = this.GetServiceName();
+                serviceName = serviceName.Length > 0 ? serviceName : "BookingSync";
+                SharedClass.Logger.Info("Service Name : " + serviceName);
+
                 sqlCmd.CommandType = CommandType.StoredProcedure;
-                sqlCmd.Parameters.Add(DataBaseParameters.SERVICE_NAME, SqlDbType.VarChar, 20).Value = "BookingSync";
+                sqlCmd.Parameters.Add(DataBaseParameters.SERVICE_NAME, SqlDbType.VarChar, 32).Value = serviceName;
                 sqlCmd.Parameters.Add(DataBaseParameters.IS_STOPPED, SqlDbType.Bit).Value = isStopped;
                 sqlCon.Open();
                 sqlCmd.ExecuteNonQuery();
@@ -461,6 +464,24 @@ namespace BookingSync
                 {
                 }
             }
+        }
+
+        private string GetServiceName()
+        {
+            string serviceName = string.Empty;
+            try
+            {
+                int processId = System.Diagnostics.Process.GetCurrentProcess().Id;
+                System.Management.ManagementObjectSearcher searcher = new System.Management.ManagementObjectSearcher("SELECT * FROM Win32_Service where ProcessId = " + processId);
+                System.Management.ManagementObjectCollection collection = searcher.Get();
+                serviceName = (string)collection.Cast<System.Management.ManagementBaseObject>().First()["Name"];
+            }
+            catch (Exception e)
+            {
+                serviceName = string.Empty;
+                SharedClass.Logger.Error(string.Format("Exception while fetching the service name from OS. Reason : {0}", e.ToString()));
+            }
+            return serviceName;
         }
     }
 }

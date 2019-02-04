@@ -14,10 +14,10 @@ namespace BookingSync
         private static ILog _logger = null;
         private static bool _hasStopSignal = true;
         private static bool _isServiceCleaned = true;
-        private static byte _notifyMaxFailedAttempts = 0;
+        private static byte _notifyMaxFailedAttempts = 3;
         private static string _notifyAuthUserName = string.Empty;
         private static string _notifyAuthPassword = string.Empty;
-        private static int _seatSyncIntervalInSeconds = 120;
+        private static int _seatSyncIntervalInSeconds = 60;
         private static int _scheduleSyncIntervalInSeconds = 600;
         private static int _releaseCheckIntervalInSeconds = 120;
         #endregion
